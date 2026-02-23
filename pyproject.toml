@@ -1,0 +1,38 @@
+[project]
+name = "advana-desafio-mle"
+version = "0.1.0"
+description = "Software Engineer (ML & LLMs) challenge project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi~=0.86.0",
+    "anyio<4",
+    "pydantic~=1.10.2",
+    "uvicorn~=0.15.0",
+    "numpy~=1.26.4",
+    "pandas~=2.2.3",
+    "scikit-learn~=1.5.2",
+]
+
+[dependency-groups]
+dev = [
+    "matplotlib~=3.9.4",
+    "seaborn~=0.13.2",
+]
+test = [
+    "locust~=2.38.1",
+    "coverage~=7.6.12",
+    "pytest~=8.4.0",
+    "pytest-cov~=6.0.0",
+    "mockito~=1.2.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["challenge"]
+
+[tool.uv]
+default-groups = ["dev", "test"]
