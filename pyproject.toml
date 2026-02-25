@@ -18,6 +18,8 @@ dependencies = [
 dev = [
     "matplotlib~=3.9.4",
     "seaborn~=0.13.2",
+    "ipykernel~=6.29.5",
+    "xgboost>=3.2.0",
 ]
 test = [
     "locust~=2.38.1",
