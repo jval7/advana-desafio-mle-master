@@ -1,4 +1,5 @@
 import unittest
+import pathlib
 
 import challenge.model
 import pandas as pd
@@ -7,6 +8,9 @@ import sklearn.model_selection
 
 
 class TestModel(unittest.TestCase):
+    _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+    _DATASET_PATH = _REPO_ROOT / "data" / "data.csv"
+
     FEATURES_COLS = [
         "OPERA_Latin American Wings",
         "MES_7",
@@ -25,7 +29,7 @@ class TestModel(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.model = challenge.model.DelayModel()
-        self.data = pd.read_csv(filepath_or_buffer="../data/data.csv")
+        self.data = pd.read_csv(filepath_or_buffer=self._DATASET_PATH)
 
     def test_model_preprocess_for_training(self) -> None:
         preprocess_result = self.model.preprocess(data=self.data, target_column="delay")
