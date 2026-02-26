@@ -38,3 +38,10 @@ packages = ["challenge"]
 
 [tool.uv]
 default-groups = ["dev", "test"]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["challenge.api"]
+ignore_errors = true

@@ -1,3 +1,4 @@
-from challenge.api import app
+import challenge.api
 
+app = challenge.api.app
 application = app
