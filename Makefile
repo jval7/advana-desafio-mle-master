@@ -60,5 +60,9 @@ precommit-scoped:	## Run pre-commit for process files tracked in release
 	FILES="$$(find tools openspec -type f)"; \
 	pre-commit run --files AGENTS.md .pre-commit-config.yaml pyproject.toml $$FILES
 
+.PHONY: precommit-all
+precommit-all:	## Run pre-commit for the whole repository
+	pre-commit run --all-files
+
 .PHONY: pc
-pc: precommit-scoped	## Short alias for precommit-scoped
+pc: precommit-all	## Short alias for full-repo pre-commit
