@@ -22,7 +22,7 @@ venv:			## Create a virtual environment
 install:		## Install dependencies
 	$(UV_CMD) sync --group dev --group test
 
-STRESS_URL = http://127.0.0.1:8000
+STRESS_URL = https://flight-delay-predictor-api-y7sly7ioha-uc.a.run.app
 .PHONY: stress-test
 stress-test:
 	# change stress url to your deployed app
