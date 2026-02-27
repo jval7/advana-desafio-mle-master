@@ -32,7 +32,6 @@ Update at least:
 
 - `project_id`
 - `image_uri`
-- `terraform_deployer_service_account_email` (the CI deployer SA, for example `github-deployer@<PROJECT_ID>.iam.gserviceaccount.com`)
 
 Optional:
 
@@ -139,7 +138,17 @@ GitHub Actions uses OIDC (`google-github-actions/auth@v2`) with Workload Identit
 Important:
 
 - Workflows enforce `TF_MODEL_ARTIFACT_PATH=data/model.skops` for this repository runtime.
-- Terraform grants `roles/iam.serviceAccountUser` from `GCP_SERVICE_ACCOUNT_EMAIL` to the Cloud Run runtime service account to prevent `iam.serviceaccounts.actAs` failures during Cloud Run updates.
+- Cloud Run runtime service account must grant `roles/iam.serviceAccountUser` to `GCP_SERVICE_ACCOUNT_EMAIL` to allow deploy updates via OIDC/WIF.
+
+Example:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  <RUNTIME_SERVICE_ACCOUNT_EMAIL> \
+  --project <PROJECT_ID> \
+  --member "serviceAccount:<GCP_SERVICE_ACCOUNT_EMAIL>" \
+  --role "roles/iam.serviceAccountUser"
+```
 
 If `TF_CI_ENABLED` is not set to `true`, the Terraform workflow is skipped automatically (it will not fail CI).
 

@@ -32,12 +32,6 @@ variable "image_uri" {
   type        = string
 }
 
-variable "terraform_deployer_service_account_email" {
-  description = "Service account email used by Terraform apply in CI/CD. Granted iam.serviceAccountUser on the Cloud Run runtime service account."
-  type        = string
-  default     = null
-}
-
 variable "model_artifact_path" {
   description = "Model artifact path passed as MODEL_ARTIFACT_PATH env var."
   type        = string
