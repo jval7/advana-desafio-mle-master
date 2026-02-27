@@ -32,6 +32,11 @@ Update at least:
 
 - `project_id`
 - `image_uri`
+- `terraform_deployer_service_account_email` (the CI deployer SA, for example `github-deployer@<PROJECT_ID>.iam.gserviceaccount.com`)
+
+Optional:
+
+- `cloud_run_runtime_service_account_email` (if unset, defaults to `<PROJECT_NUMBER>-compute@developer.gserviceaccount.com`)
 
 ## 4) Import existing resources (recommended for this repo)
 
@@ -130,6 +135,11 @@ Create these **Repository Variables** (Settings -> Secrets and variables -> Acti
 
 No repository secret with service account JSON is required.
 GitHub Actions uses OIDC (`google-github-actions/auth@v2`) with Workload Identity Federation.
+
+Important:
+
+- Workflows enforce `TF_MODEL_ARTIFACT_PATH=data/model.skops` for this repository runtime.
+- Terraform grants `roles/iam.serviceAccountUser` from `GCP_SERVICE_ACCOUNT_EMAIL` to the Cloud Run runtime service account to prevent `iam.serviceaccounts.actAs` failures during Cloud Run updates.
 
 If `TF_CI_ENABLED` is not set to `true`, the Terraform workflow is skipped automatically (it will not fail CI).
 

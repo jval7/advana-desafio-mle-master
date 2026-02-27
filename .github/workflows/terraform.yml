@@ -75,13 +75,19 @@ jobs:
       - name: Write CI terraform variables
         run: |
           set -euo pipefail
+          MODEL_ARTIFACT_PATH="${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
+          if [ "${MODEL_ARTIFACT_PATH}" != "data/model.skops" ]; then
+            echo "::error::TF_MODEL_ARTIFACT_PATH must be data/model.skops for the current deployed model artifact."
+            exit 1
+          fi
           cat > "${TF_DIR}/terraform.auto.tfvars" <<EOF
           project_id                      = "${GCP_PROJECT_ID}"
           region                          = "${GCP_REGION:-us-central1}"
           artifact_registry_repository_id = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
           cloud_run_service_name          = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
           image_uri                       = "${TF_IMAGE_URI}"
-          model_artifact_path             = "${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
+          model_artifact_path             = "${MODEL_ARTIFACT_PATH}"
+          terraform_deployer_service_account_email = "${GCP_SERVICE_ACCOUNT_EMAIL}"
           container_port                  = 8080
           cloud_run_min_instance_count    = 0
           cloud_run_max_instance_count    = 2
@@ -166,13 +172,19 @@ jobs:
       - name: Write CI terraform variables
         run: |
           set -euo pipefail
+          MODEL_ARTIFACT_PATH="${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
+          if [ "${MODEL_ARTIFACT_PATH}" != "data/model.skops" ]; then
+            echo "::error::TF_MODEL_ARTIFACT_PATH must be data/model.skops for the current deployed model artifact."
+            exit 1
+          fi
           cat > "${TF_DIR}/terraform.auto.tfvars" <<EOF
           project_id                      = "${GCP_PROJECT_ID}"
           region                          = "${GCP_REGION:-us-central1}"
           artifact_registry_repository_id = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
           cloud_run_service_name          = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
           image_uri                       = "${TF_IMAGE_URI}"
-          model_artifact_path             = "${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
+          model_artifact_path             = "${MODEL_ARTIFACT_PATH}"
+          terraform_deployer_service_account_email = "${GCP_SERVICE_ACCOUNT_EMAIL}"
           container_port                  = 8080
           cloud_run_min_instance_count    = 0
           cloud_run_max_instance_count    = 2

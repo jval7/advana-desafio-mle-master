@@ -1,8 +1,16 @@
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 locals {
   labels = {
     managed_by = "terraform"
     project    = "advana-challenge"
   }
+  cloud_run_runtime_service_account_email_input  = trimspace(coalesce(var.cloud_run_runtime_service_account_email, ""))
+  terraform_deployer_service_account_email_input = trimspace(coalesce(var.terraform_deployer_service_account_email, ""))
+  runtime_service_account_email                  = local.cloud_run_runtime_service_account_email_input != "" ? local.cloud_run_runtime_service_account_email_input : "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  terraform_deployer_member                      = local.terraform_deployer_service_account_email_input != "" ? "serviceAccount:${local.terraform_deployer_service_account_email_input}" : null
 }
 
 resource "google_project_service" "required" {
@@ -24,6 +32,16 @@ resource "google_artifact_registry_repository" "docker" {
   depends_on = [google_project_service.required]
 }
 
+resource "google_service_account_iam_member" "terraform_act_as_runtime" {
+  count = local.terraform_deployer_member == null ? 0 : 1
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.runtime_service_account_email}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = local.terraform_deployer_member
+
+  depends_on = [google_project_service.required]
+}
+
 resource "google_cloud_run_v2_service" "api" {
   project  = var.project_id
   location = var.region
@@ -37,6 +55,8 @@ resource "google_cloud_run_v2_service" "api" {
   }
 
   template {
+    service_account = local.runtime_service_account_email
+
     scaling {
       min_instance_count = var.cloud_run_min_instance_count
       max_instance_count = var.cloud_run_max_instance_count
@@ -64,6 +84,7 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_service.required,
     google_artifact_registry_repository.docker,
+    google_service_account_iam_member.terraform_act_as_runtime,
   ]
 }
 
