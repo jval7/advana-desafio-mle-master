@@ -15,7 +15,15 @@ make model-test
 make api-test
 ```
 
-`requirements*.txt` are kept for compatibility, but the recommended workflow is `uv`.
+`pyproject.toml` is the single source of truth for dependencies in this project.
+
+## Current Operational Model
+
+The current productionized model in `challenge/model.py` is:
+
+- `XGBoostClassifier`
+- Top-10 engineered one-hot features (`OPERA`, `TIPOVUELO`, `MES`)
+- Class imbalance handling with `scale_pos_weight`
 
 ## Problem
 

@@ -1,6 +1,6 @@
 import numpy
 import pandas
-import sklearn.linear_model
+import xgboost
 
 
 class DelayModel:
@@ -20,7 +20,7 @@ class DelayModel:
     def __init__(
         self,
     ) -> None:
-        self._model: sklearn.linear_model.LogisticRegression | None = None
+        self._model: xgboost.XGBClassifier | None = None
 
     def _get_min_diff(self, data: pandas.DataFrame) -> pandas.Series:
         scheduled_date = pandas.to_datetime(data["Fecha-I"], errors="coerce")
@@ -69,21 +69,17 @@ class DelayModel:
         target: pandas.DataFrame,
     ) -> None:
         target_series = target.iloc[:, 0]
-        total_rows = len(target_series)
         n_y0 = int((target_series == 0).sum())
         n_y1 = int((target_series == 1).sum())
 
-        class_weights: dict[int, float] | None = None
-        if total_rows > 0 and n_y0 > 0 and n_y1 > 0:
-            class_weights = {
-                0: n_y1 / total_rows,
-                1: n_y0 / total_rows,
-            }
+        scale_pos_weight = 1.0
+        if n_y0 > 0 and n_y1 > 0:
+            scale_pos_weight = n_y0 / n_y1
 
-        self._model = sklearn.linear_model.LogisticRegression(
+        self._model = xgboost.XGBClassifier(
             random_state=1,
-            class_weight=class_weights,
-            max_iter=1000,
+            learning_rate=0.01,
+            scale_pos_weight=scale_pos_weight,
         )
         self._model.fit(features, target_series)
 
