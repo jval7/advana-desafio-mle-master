@@ -21,3 +21,9 @@ secrets/
 .pytest_cache
 insecure_report.txt
 reports
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.auto.tfvars
+terraform.tfvars
