@@ -123,12 +123,13 @@ Create these **Repository Variables** (Settings -> Secrets and variables -> Acti
 - `TF_CLOUD_RUN_SERVICE` (example: `flight-delay-predictor-api`)
 - `TF_IMAGE_URI` (full image URI currently deployed)
 - `TF_IMAGE_NAME` (optional, default: `flight-delay-api`)
-- `TF_MODEL_ARTIFACT_PATH` (example: `data/model.joblib`)
+- `TF_MODEL_ARTIFACT_PATH` (example: `data/model.skops`)
 - `TF_CI_ENABLED` (`true` to enable Terraform workflow, `false` or unset to skip it)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER` (full Workload Identity Provider resource path, for example: `projects/123456789012/locations/global/workloadIdentityPools/github/providers/github-oidc`)
+- `GCP_SERVICE_ACCOUNT_EMAIL` (service account email to impersonate from GitHub Actions, for example: `github-deployer@<PROJECT_ID>.iam.gserviceaccount.com`)
 
-Create this **Repository Secret**:
-
-- `GCP_SA_KEY` (service account JSON key with permissions for Cloud Run, Artifact Registry, Service Usage, IAM, and Cloud Build as required by Terraform resources)
+No repository secret with service account JSON is required.
+GitHub Actions uses OIDC (`google-github-actions/auth@v2`) with Workload Identity Federation.
 
 If `TF_CI_ENABLED` is not set to `true`, the Terraform workflow is skipped automatically (it will not fail CI).
 

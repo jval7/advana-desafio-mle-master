@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: terraform-${{ github.ref }}
@@ -37,6 +38,8 @@ env:
   TF_IMAGE_URI: ${{ vars.TF_IMAGE_URI }}
   TF_MODEL_ARTIFACT_PATH: ${{ vars.TF_MODEL_ARTIFACT_PATH }}
   TF_CI_ENABLED: ${{ vars.TF_CI_ENABLED }}
+  GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
 
 jobs:
   terraform-plan:
@@ -52,7 +55,9 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -64,6 +69,8 @@ jobs:
           set -euo pipefail
           : "${GCP_PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
           : "${TF_IMAGE_URI:?Set repository variable TF_IMAGE_URI}"
+          : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Set repository variable GCP_WORKLOAD_IDENTITY_PROVIDER}"
+          : "${GCP_SERVICE_ACCOUNT_EMAIL:?Set repository variable GCP_SERVICE_ACCOUNT_EMAIL}"
 
       - name: Write CI terraform variables
         run: |
@@ -139,7 +146,9 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -151,6 +160,8 @@ jobs:
           set -euo pipefail
           : "${GCP_PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
           : "${TF_IMAGE_URI:?Set repository variable TF_IMAGE_URI}"
+          : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Set repository variable GCP_WORKLOAD_IDENTITY_PROVIDER}"
+          : "${GCP_SERVICE_ACCOUNT_EMAIL:?Set repository variable GCP_SERVICE_ACCOUNT_EMAIL}"
 
       - name: Write CI terraform variables
         run: |
