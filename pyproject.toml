@@ -12,12 +12,15 @@ dependencies = [
     "numpy~=1.26.4",
     "pandas~=2.2.3",
     "scikit-learn~=1.5.2",
+    "skops~=0.13.0",
+    "xgboost>=3.2.0",
 ]
 
 [dependency-groups]
 dev = [
     "matplotlib~=3.9.4",
     "seaborn~=0.13.2",
+    "ipykernel~=6.29.5",
 ]
 test = [
     "locust~=2.38.1",
@@ -36,3 +39,10 @@ packages = ["challenge"]
 
 [tool.uv]
 default-groups = ["dev", "test"]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["challenge.api"]
+ignore_errors = true

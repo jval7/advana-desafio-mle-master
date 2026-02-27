@@ -22,23 +22,47 @@ venv:			## Create a virtual environment
 install:		## Install dependencies
 	$(UV_CMD) sync --group dev --group test
 
-STRESS_URL = http://127.0.0.1:8000 
+STRESS_URL = https://flight-delay-predictor-api-y7sly7ioha-uc.a.run.app
 .PHONY: stress-test
 stress-test:
-	# change stress url to your deployed app 
+	# change stress url to your deployed app
 	mkdir -p reports
-	$(UV_CMD) run --group test locust -f tests/stress/api_stress.py --print-stats --html reports/stress-test.html --run-time 60s --headless --users 100 --spawn-rate 1 -H $(STRESS_URL)
+	if [ -x .venv/bin/locust ]; then \
+		.venv/bin/locust -f tests/stress/api_stress.py --print-stats --html reports/stress-test.html --run-time 60s --headless --users 100 --spawn-rate 1 -H $(STRESS_URL); \
+	else \
+		$(UV_CMD) run --group test locust -f tests/stress/api_stress.py --print-stats --html reports/stress-test.html --run-time 60s --headless --users 100 --spawn-rate 1 -H $(STRESS_URL); \
+	fi
 
 .PHONY: model-test
 model-test:			## Run tests and coverage
 	mkdir -p reports
-	$(UV_CMD) run --group test pytest --cov-config=.coveragerc --cov-report term --cov-report html:reports/html --cov-report xml:reports/coverage.xml --junitxml=reports/junit.xml --cov=challenge tests/model
+	if [ -x .venv/bin/pytest ]; then \
+		cd tests && PYTHONPATH=.. ../.venv/bin/pytest --cov-config=.coveragerc --cov-report term --cov-report html:../reports/html --cov-report xml:../reports/coverage.xml --junitxml=../reports/junit.xml --cov=challenge model; \
+	else \
+		cd tests && PYTHONPATH=.. $(UV_CMD) run --group test pytest --cov-config=.coveragerc --cov-report term --cov-report html:../reports/html --cov-report xml:../reports/coverage.xml --junitxml=../reports/junit.xml --cov=challenge model; \
+	fi
 
 .PHONY: api-test
 api-test:			## Run tests and coverage
 	mkdir -p reports
-	$(UV_CMD) run --group test pytest --cov-config=.coveragerc --cov-report term --cov-report html:reports/html --cov-report xml:reports/coverage.xml --junitxml=reports/junit.xml --cov=challenge tests/api
+	if [ -x .venv/bin/pytest ]; then \
+		.venv/bin/pytest --cov-config=.coveragerc --cov-report term --cov-report html:reports/html --cov-report xml:reports/coverage.xml --junitxml=reports/junit.xml --cov=challenge tests/api; \
+	else \
+		$(UV_CMD) run --group test pytest --cov-config=.coveragerc --cov-report term --cov-report html:reports/html --cov-report xml:reports/coverage.xml --junitxml=reports/junit.xml --cov=challenge tests/api; \
+	fi
 
 .PHONY: build
 build:			## Build locally the python artifact
 	$(UV_CMD) build
+
+.PHONY: precommit-scoped
+precommit-scoped:	## Run pre-commit for process files tracked in release
+	FILES="$$(find tools openspec -type f)"; \
+	pre-commit run --files AGENTS.md .pre-commit-config.yaml pyproject.toml $$FILES
+
+.PHONY: precommit-all
+precommit-all:	## Run pre-commit for the whole repository
+	pre-commit run --all-files
+
+.PHONY: pc
+pc: precommit-all	## Short alias for full-repo pre-commit

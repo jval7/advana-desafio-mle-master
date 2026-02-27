@@ -1,0 +1,73 @@
+name: "Continuous Integration"
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "challenge/**"
+      - "tests/**"
+      - "tools/**"
+      - "data/model.skops"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "challenge/**"
+      - "tests/**"
+      - "tools/**"
+      - "data/model.skops"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --group dev --group test
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pre-commit
+
+      - name: Run pre-commit checks
+        run: make pc
+
+      - name: Run model tests
+        run: make model-test
+
+      - name: Run api tests
+        run: make api-test
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-reports
+          path: reports/**
+          if-no-files-found: ignore
