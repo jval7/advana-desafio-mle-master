@@ -158,10 +158,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [build-and-push-image]
-    if: vars.TF_CI_ENABLED == 'true' && needs.build-and-push-image.result == 'success'
+    if: vars.TF_CI_ENABLED == 'true' && needs['build-and-push-image'].result == 'success'
     environment: production
     outputs:
-      service_url: ${{ steps.outputs.outputs_service_url }}
+      service_url: ${{ steps.export_service_url.outputs.service_url }}
 
     steps:
       - name: Checkout repository
@@ -198,7 +198,7 @@ jobs:
           artifact_registry_repository_id      = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
           cloud_run_service_name               = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
           cloud_run_runtime_service_account_email = "${RUNTIME_SERVICE_ACCOUNT}"
-          image_uri                            = "${{ needs.build-and-push-image.outputs.image_uri }}"
+          image_uri                            = "${{ needs['build-and-push-image'].outputs.image_uri }}"
           model_artifact_path                  = "${MODEL_ARTIFACT_PATH}"
           container_port                       = 8080
           cloud_run_min_instance_count         = 0
@@ -235,29 +235,38 @@ jobs:
         run: terraform -chdir="${TF_DIR}" apply -auto-approve -no-color
 
       - name: Export outputs
-        id: outputs
+        id: export_service_url
         run: |
           set -euo pipefail
-          echo "outputs_service_url=$(terraform -chdir="${TF_DIR}" output -raw service_url)" >> "$GITHUB_OUTPUT"
+          SERVICE_URL="$(terraform -chdir="${TF_DIR}" output -raw service_url)"
+          echo "service_url=${SERVICE_URL}" >> "$GITHUB_OUTPUT"
 
   smoke-test:
     name: "Smoke Test"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [terraform-apply]
-    if: vars.TF_CI_ENABLED == 'true' && needs.terraform-apply.result == 'success'
+    if: vars.TF_CI_ENABLED == 'true' && needs['terraform-apply'].result == 'success'
 
     steps:
       - name: Verify /health
         run: |
           set -euo pipefail
-          URL="${{ needs.terraform-apply.outputs.service_url }}"
+          URL="${{ needs['terraform-apply'].outputs.service_url }}"
+          if [ -z "${URL}" ]; then
+            echo "::error::Empty service_url output from terraform-apply job."
+            exit 1
+          fi
           curl -fsS "${URL}/health"
 
       - name: Verify /predict
         run: |
           set -euo pipefail
-          URL="${{ needs.terraform-apply.outputs.service_url }}"
+          URL="${{ needs['terraform-apply'].outputs.service_url }}"
+          if [ -z "${URL}" ]; then
+            echo "::error::Empty service_url output from terraform-apply job."
+            exit 1
+          fi
           RESPONSE="$(curl -fsS -X POST "${URL}/predict" \
             -H "Content-Type: application/json" \
             -d '{"flights":[{"OPERA":"Aerolineas Argentinas","TIPOVUELO":"N","MES":3}]}' )"
