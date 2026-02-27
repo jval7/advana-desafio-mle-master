@@ -98,15 +98,20 @@ terraform output service_name
 
 ## 8) GitHub Actions (CI/CD)
 
-The workflow file is:
+Workflow files:
 
 - `.github/workflows/terraform.yml`
+- `.github/workflows/release.yml`
 
-What it does:
+What they do:
 
-- Runs `terraform fmt`, `validate`, and `plan` on PR/push to `develop` and `main` (only when Terraform files change).
-- Supports manual `apply` via `workflow_dispatch` with `apply=true` and only from `main`.
-- Imports existing resources before plan/apply (best effort) to support this repository bootstrap path.
+- `terraform.yml`: runs `terraform fmt`, `validate`, and `plan` on PR and push to `develop` when Terraform files change.
+- `release.yml`: release sequence for `main` in this order:
+  1) app validation and tests
+  2) image build and push
+  3) terraform apply with the new image
+  4) smoke test (`/health` and `/predict`)
+- Both workflows import existing resources before plan/apply (best effort) to support this repository bootstrap path.
 
 ### Required repository configuration
 
@@ -117,6 +122,7 @@ Create these **Repository Variables** (Settings -> Secrets and variables -> Acti
 - `TF_ARTIFACT_REPO` (example: `flight-delay-predictor`)
 - `TF_CLOUD_RUN_SERVICE` (example: `flight-delay-predictor-api`)
 - `TF_IMAGE_URI` (full image URI currently deployed)
+- `TF_IMAGE_NAME` (optional, default: `flight-delay-api`)
 - `TF_MODEL_ARTIFACT_PATH` (example: `data/model.joblib`)
 - `TF_CI_ENABLED` (`true` to enable Terraform workflow, `false` or unset to skip it)
 

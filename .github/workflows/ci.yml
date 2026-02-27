@@ -3,8 +3,30 @@ name: "Continuous Integration"
 on:
   pull_request:
     branches: [develop, main]
+    paths:
+      - "challenge/**"
+      - "tests/**"
+      - "tools/**"
+      - "data/model.joblib"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/ci.yml"
   push:
-    branches: [develop, main]
+    branches: [develop]
+    paths:
+      - "challenge/**"
+      - "tests/**"
+      - "tools/**"
+      - "data/model.joblib"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 permissions:
