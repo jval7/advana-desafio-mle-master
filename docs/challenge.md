@@ -1,5 +1,16 @@
 # Challenge Notes
 
+## Project Snapshot
+
+- Goal: operationalize flight-delay prediction with a testable API and production-ready cloud deployment.
+- Core model decision: `XGBoostClassifier` with top-10 one-hot features and class-imbalance handling (`scale_pos_weight`), prioritizing delay recall.
+- API decision: `FastAPI` with explicit domain validation (`OPERA`, `TIPOVUELO`, `MES`) and consistent `400` responses for request/business validation errors.
+- Serialization/security decision: use `skops` (`data/model.skops`) with trusted-type checks before loading the model artifact.
+- Deployment decision: containerized service on `Cloud Run` managed with Terraform IaC (`infra/terraform`) and image distribution via Artifact Registry.
+- CI/CD decision: GitHub Actions split by purpose (`ci.yml`, `cd.yml`, `terraform.yml`) with OIDC + Workload Identity Federation (no static SA JSON keys).
+- Key dependencies: `fastapi`, `pydantic`, `pandas`, `scikit-learn`, `xgboost`, `skops`, `uvicorn`, plus `uv` for dependency and lock management.
+- Quality gates: `make pc` (lint/format/type/arch checks), `make model-test`, `make api-test`, and `make stress-test`.
+
 ## Phase 1 - Critical Notebook Analysis
 
 ### Executive summary
@@ -100,29 +111,79 @@ The productionized model was aligned with the notebook conclusion:
    inversion in the current function.
 4. Verification of `period_day` null count caused by boundary condition errors.
 
-### Scope of this phase
-
-- This document records the notebook **critical analysis** and the selected
-  model decision.
-- API contracts remain unchanged.
-- The production model reference has been updated to XGBoost across
-  documentation and implementation.
 
 ## Part II - API
 
 - Implemented with `FastAPI` in `challenge/api.py`.
-- Endpoints:
-  - `GET /health` -> `{"status": "OK"}`
-  - `POST /predict` -> `{"predict": [int, ...]}`
-- Input validation for `OPERA`, `TIPOVUELO`, and `MES`.
-- Request validation errors are mapped to HTTP `400` to match challenge test expectations.
+- Base URL (deployed): `https://flight-delay-predictor-api-y7sly7ioha-uc.a.run.app`
+
+### 1) Health endpoint
+
+- Method/Path: `GET /health`
+- Input: none
+- Success response (`200`):
+
+```json
+{
+  "status": "OK"
+}
+```
+
+### 2) Prediction endpoint
+
+- Method/Path: `POST /predict`
+- Input body schema:
+
+```json
+{
+  "flights": [
+    {
+      "OPERA": "Aerolineas Argentinas",
+      "TIPOVUELO": "N",
+      "MES": 3
+    }
+  ]
+}
+```
+
+- Success response (`200`):
+
+```json
+{
+  "predict": [0]
+}
+```
+
+### 3) Validation and error responses
+
+- Business validation (`400`) for invalid values:
+  - `OPERA` not allowed -> `{"detail":"Invalid OPERA value."}`
+  - `TIPOVUELO` not in `{I, N}` -> `{"detail":"Invalid TIPOVUELO value."}`
+  - `MES` outside `1..12` -> `{"detail":"Invalid MES value."}`
+- Request schema validation (`400`) for malformed body or missing fields:
+  - Response shape: `{"detail":[...pydantic/fastapi validation errors...]}`.
 
 ## Part III - Stress Test
 
-- `make stress-test` is supported through the provided Makefile target.
-- `STRESS_URL` should be set to the deployed API URL before execution.
+- Cloud Run service URL:
+  `https://flight-delay-predictor-api-y7sly7ioha-uc.a.run.app`.
+- Stress test executed for 60 seconds with:
+  `make stress-test STRESS_URL=https://flight-delay-predictor-api-y7sly7ioha-uc.a.run.app`.
+- Stress result summary:
+  - Requests: `5212`
+  - Failures: `0 (0.00%)`
+  - Avg response time: `345 ms`
+  - p50 / p95 / p99: `270 ms / 460 ms / 1100 ms`
+  - Max response time: `15518 ms`
+- HTML report generated at `reports/stress-test.html`.
 
 ## Part IV - CI/CD
 
-- Workflow files are preserved in `workflows/`.
-- The `.github/workflows` copy step is handled in repository setup for delivery.
+- Workflow files are preserved in `workflows/` and implemented in `.github/workflows/`.
+- `ci.yml` runs on `pull_request` and `push` to `develop` for relevant files.
+- CI steps: dependency sync (`uv`), `make pc`, `make model-test`, and `make api-test`.
+- `make pc` is the project quality gate (`make precommit-scoped` alias in process docs / full pre-commit alias in this repo) and runs lint, format, typing, and architecture checks.
+- `cd.yml` runs on `push` to `main` (or manual dispatch) for release-related changes.
+- CD flow: validate app + infra, build/push Docker image, `terraform apply`, then smoke tests (`/health` and `/predict`).
+- Infra-only validations are covered by `terraform.yml` (`fmt`, `validate`, `plan`).
+- Cloud authentication in workflows uses OIDC + Workload Identity Federation (no service-account JSON key in repo).
