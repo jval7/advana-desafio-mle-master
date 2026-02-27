@@ -3,13 +3,13 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    MODEL_ARTIFACT_PATH=data/model.joblib
+    MODEL_ARTIFACT_PATH=data/model.skops
 
 WORKDIR /app
 
 COPY pyproject.toml README.md /app/
 COPY challenge /app/challenge
-COPY data/model.joblib /app/data/model.joblib
+COPY data/model.skops /app/data/model.skops
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir .

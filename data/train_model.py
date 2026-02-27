@@ -1,13 +1,16 @@
 import pathlib
 
-import joblib
 import pandas
+import skops.io
 
 import challenge.model
+import challenge.model_artifact
 
 _REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
 _DATASET_PATH = _REPOSITORY_ROOT / "data" / "data.csv"
-_MODEL_ARTIFACT_PATH = _REPOSITORY_ROOT / "data" / "model.joblib"
+_MODEL_ARTIFACT_PATH = (
+    _REPOSITORY_ROOT / challenge.model_artifact.default_model_artifact_relative_path()
+)
 
 
 def train_delay_model(
@@ -30,7 +33,16 @@ def save_delay_model(
     artifact_path: pathlib.Path,
 ) -> None:
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(delay_model, artifact_path)
+    skops.io.dump(delay_model, artifact_path)
+
+    expected_trusted_types = set(challenge.model_artifact.default_trusted_types())
+    artifact_untrusted_types = set(skops.io.get_untrusted_types(file=artifact_path))
+    unknown_untrusted_types = sorted(artifact_untrusted_types - expected_trusted_types)
+    if unknown_untrusted_types:
+        raise ValueError(
+            "Saved artifact contains unexpected untrusted types: "
+            f"{unknown_untrusted_types}",
+        )
 
 
 def main() -> None:

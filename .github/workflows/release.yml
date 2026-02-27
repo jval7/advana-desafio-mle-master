@@ -6,7 +6,7 @@ on:
     paths:
       - "challenge/**"
       - "infra/terraform/**"
-      - "data/model.joblib"
+      - "data/model.skops"
       - "Dockerfile"
       - "pyproject.toml"
       - "uv.lock"
@@ -187,7 +187,7 @@ jobs:
           artifact_registry_repository_id      = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
           cloud_run_service_name               = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
           image_uri                            = "${{ needs.build-and-push-image.outputs.image_uri }}"
-          model_artifact_path                  = "${TF_MODEL_ARTIFACT_PATH:-data/model.joblib}"
+          model_artifact_path                  = "${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
           container_port                       = 8080
           cloud_run_min_instance_count         = 0
           cloud_run_max_instance_count         = 3

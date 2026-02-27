@@ -29,7 +29,7 @@ variable "image_uri" {
 variable "model_artifact_path" {
   description = "Model artifact path passed as MODEL_ARTIFACT_PATH env var."
   type        = string
-  default     = "data/model.joblib"
+  default     = "data/model.skops"
 }
 
 variable "container_port" {

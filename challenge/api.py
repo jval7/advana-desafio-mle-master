@@ -1,15 +1,19 @@
+import json
+import os
+import pathlib
+import typing
+import zipfile
+
 import fastapi
 import fastapi.exceptions
 import fastapi.responses
-import joblib
-import os
 import pandas
-import pathlib
-import pickle
 import pydantic
-import typing
+import skops.io
+import skops.io.exceptions
 
 import challenge.model
+import challenge.model_artifact
 
 
 _ALLOWED_OPERATORS = frozenset(
@@ -40,7 +44,10 @@ _ALLOWED_OPERATORS = frozenset(
     ],
 )
 _ALLOWED_FLIGHT_TYPES = frozenset(["I", "N"])
-_DEFAULT_MODEL_ARTIFACT_PATH = "data/model.joblib"
+_DEFAULT_MODEL_ARTIFACT_PATH = str(
+    challenge.model_artifact.default_model_artifact_relative_path()
+)
+_MODEL_ARTIFACT_TRUSTED_TYPES_ENV_VAR = "MODEL_ARTIFACT_TRUSTED_TYPES"
 
 
 class ModelArtifactError(RuntimeError):
@@ -84,6 +91,35 @@ def _resolve_model_artifact_path() -> pathlib.Path:
     return repository_root / raw_path
 
 
+def _resolve_model_artifact_trusted_types() -> tuple[str, ...]:
+    trusted_types = set(challenge.model_artifact.default_trusted_types())
+    configured_trusted_types = os.getenv(_MODEL_ARTIFACT_TRUSTED_TYPES_ENV_VAR, "")
+
+    if configured_trusted_types:
+        for raw_trusted_type in configured_trusted_types.split(","):
+            trusted_type = raw_trusted_type.strip()
+            if trusted_type:
+                trusted_types.add(trusted_type)
+
+    return tuple(sorted(trusted_types))
+
+
+def _load_untrusted_types_from_artifact(artifact_path: pathlib.Path) -> set[str]:
+    try:
+        return set(skops.io.get_untrusted_types(file=artifact_path))
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+    ) as exception:
+        raise ModelArtifactLoadError(
+            f"Could not inspect trusted types from model artifact at '{artifact_path}'.",
+        ) from exception
+
+
 def _load_delay_model_from_artifact(
     artifact_path: pathlib.Path,
 ) -> challenge.model.DelayModel:
@@ -92,14 +128,29 @@ def _load_delay_model_from_artifact(
             f"Trained model artifact was not found at '{artifact_path}'.",
         )
 
+    trusted_types = _resolve_model_artifact_trusted_types()
+    artifact_untrusted_types = _load_untrusted_types_from_artifact(
+        artifact_path=artifact_path
+    )
+    unknown_untrusted_types = sorted(artifact_untrusted_types - set(trusted_types))
+    if unknown_untrusted_types:
+        raise ModelArtifactLoadError(
+            "Model artifact contains untrusted types that are not explicitly "
+            f"allowed: {unknown_untrusted_types}. Configure "
+            f"'{_MODEL_ARTIFACT_TRUSTED_TYPES_ENV_VAR}' only after reviewing "
+            "each type."
+        )
+
     try:
-        loaded_object = joblib.load(artifact_path)
+        loaded_object = skops.io.load(file=artifact_path, trusted=trusted_types)
     except (
         OSError,
-        EOFError,
-        pickle.UnpicklingError,
         ValueError,
         TypeError,
+        KeyError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+        skops.io.exceptions.UntrustedTypesFoundException,
     ) as exception:
         raise ModelArtifactLoadError(
             f"Could not load trained model artifact from '{artifact_path}'.",
