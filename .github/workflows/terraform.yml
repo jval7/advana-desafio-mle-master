@@ -1,0 +1,197 @@
+name: "Terraform Infrastructure"
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [develop, main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply Terraform changes (only from main branch)"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_DIR: "infra/terraform"
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  TF_ARTIFACT_REPO: ${{ vars.TF_ARTIFACT_REPO }}
+  TF_CLOUD_RUN_SERVICE: ${{ vars.TF_CLOUD_RUN_SERVICE }}
+  TF_IMAGE_URI: ${{ vars.TF_IMAGE_URI }}
+  TF_MODEL_ARTIFACT_PATH: ${{ vars.TF_MODEL_ARTIFACT_PATH }}
+  TF_CI_ENABLED: ${{ vars.TF_CI_ENABLED }}
+
+jobs:
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: vars.TF_CI_ENABLED == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Validate CI configuration
+        run: |
+          set -euo pipefail
+          : "${GCP_PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
+          : "${TF_IMAGE_URI:?Set repository variable TF_IMAGE_URI}"
+
+      - name: Write CI terraform variables
+        run: |
+          set -euo pipefail
+          cat > "${TF_DIR}/terraform.auto.tfvars" <<EOF
+          project_id                      = "${GCP_PROJECT_ID}"
+          region                          = "${GCP_REGION:-us-central1}"
+          artifact_registry_repository_id = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          cloud_run_service_name          = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+          image_uri                       = "${TF_IMAGE_URI}"
+          model_artifact_path             = "${TF_MODEL_ARTIFACT_PATH:-data/model.joblib}"
+          container_port                  = 8080
+          cloud_run_min_instance_count    = 0
+          cloud_run_max_instance_count    = 3
+          cloud_run_service_min_instance_count = 0
+          cloud_run_manual_instance_count = 0
+          allow_unauthenticated           = true
+          EOF
+          terraform -chdir="${TF_DIR}" fmt -no-color terraform.auto.tfvars
+
+      - name: Terraform init
+        run: terraform -chdir="${TF_DIR}" init -input=false -no-color
+
+      - name: Terraform fmt check
+        run: terraform -chdir="${TF_DIR}" fmt -check -diff
+
+      - name: Terraform validate
+        run: terraform -chdir="${TF_DIR}" validate -no-color
+
+      - name: Import existing resources (best effort)
+        run: |
+          set -euo pipefail
+          PROJECT_ID="${GCP_PROJECT_ID}"
+          REGION="${GCP_REGION:-us-central1}"
+          AR_REPO="${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          SERVICE="${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["run.googleapis.com"]' "projects/${PROJECT_ID}/services/run.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["artifactregistry.googleapis.com"]' "projects/${PROJECT_ID}/services/artifactregistry.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["cloudbuild.googleapis.com"]' "projects/${PROJECT_ID}/services/cloudbuild.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["iam.googleapis.com"]' "projects/${PROJECT_ID}/services/iam.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import google_artifact_registry_repository.docker "projects/${PROJECT_ID}/locations/${REGION}/repositories/${AR_REPO}" || true
+          terraform -chdir="${TF_DIR}" import google_cloud_run_v2_service.api "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE}" || true
+          terraform -chdir="${TF_DIR}" import 'google_cloud_run_v2_service_iam_member.public_invoker[0]' "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE} roles/run.invoker allUsers" || true
+
+      - name: Terraform plan
+        run: |
+          terraform -chdir="${TF_DIR}" plan -no-color -out=tfplan
+          terraform -chdir="${TF_DIR}" show -no-color tfplan > tfplan.txt
+
+      - name: Upload terraform plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: |
+            ${{ env.TF_DIR }}/tfplan
+            ${{ env.TF_DIR }}/tfplan.txt
+          if-no-files-found: ignore
+
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [terraform-plan]
+    if: vars.TF_CI_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && inputs.apply == true && github.ref_name == 'main'
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Validate CI configuration
+        run: |
+          set -euo pipefail
+          : "${GCP_PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
+          : "${TF_IMAGE_URI:?Set repository variable TF_IMAGE_URI}"
+
+      - name: Write CI terraform variables
+        run: |
+          set -euo pipefail
+          cat > "${TF_DIR}/terraform.auto.tfvars" <<EOF
+          project_id                      = "${GCP_PROJECT_ID}"
+          region                          = "${GCP_REGION:-us-central1}"
+          artifact_registry_repository_id = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          cloud_run_service_name          = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+          image_uri                       = "${TF_IMAGE_URI}"
+          model_artifact_path             = "${TF_MODEL_ARTIFACT_PATH:-data/model.joblib}"
+          container_port                  = 8080
+          cloud_run_min_instance_count    = 0
+          cloud_run_max_instance_count    = 3
+          cloud_run_service_min_instance_count = 0
+          cloud_run_manual_instance_count = 0
+          allow_unauthenticated           = true
+          EOF
+          terraform -chdir="${TF_DIR}" fmt -no-color terraform.auto.tfvars
+
+      - name: Terraform init
+        run: terraform -chdir="${TF_DIR}" init -input=false -no-color
+
+      - name: Import existing resources (best effort)
+        run: |
+          set -euo pipefail
+          PROJECT_ID="${GCP_PROJECT_ID}"
+          REGION="${GCP_REGION:-us-central1}"
+          AR_REPO="${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          SERVICE="${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["run.googleapis.com"]' "projects/${PROJECT_ID}/services/run.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["artifactregistry.googleapis.com"]' "projects/${PROJECT_ID}/services/artifactregistry.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["cloudbuild.googleapis.com"]' "projects/${PROJECT_ID}/services/cloudbuild.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["iam.googleapis.com"]' "projects/${PROJECT_ID}/services/iam.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import google_artifact_registry_repository.docker "projects/${PROJECT_ID}/locations/${REGION}/repositories/${AR_REPO}" || true
+          terraform -chdir="${TF_DIR}" import google_cloud_run_v2_service.api "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE}" || true
+          terraform -chdir="${TF_DIR}" import 'google_cloud_run_v2_service_iam_member.public_invoker[0]' "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE} roles/run.invoker allUsers" || true
+
+      - name: Terraform plan (apply preview)
+        run: terraform -chdir="${TF_DIR}" plan -no-color
+
+      - name: Terraform apply
+        run: terraform -chdir="${TF_DIR}" apply -auto-approve -no-color

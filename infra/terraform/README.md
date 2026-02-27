@@ -95,3 +95,37 @@ terraform apply
 terraform output service_url
 terraform output service_name
 ```
+
+## 8) GitHub Actions (CI/CD)
+
+The workflow file is:
+
+- `.github/workflows/terraform.yml`
+
+What it does:
+
+- Runs `terraform fmt`, `validate`, and `plan` on PR/push to `develop` and `main` (only when Terraform files change).
+- Supports manual `apply` via `workflow_dispatch` with `apply=true` and only from `main`.
+- Imports existing resources before plan/apply (best effort) to support this repository bootstrap path.
+
+### Required repository configuration
+
+Create these **Repository Variables** (Settings -> Secrets and variables -> Actions -> Variables):
+
+- `GCP_PROJECT_ID` (example: `advana-fd-jv7-02261522`)
+- `GCP_REGION` (example: `us-central1`)
+- `TF_ARTIFACT_REPO` (example: `flight-delay-predictor`)
+- `TF_CLOUD_RUN_SERVICE` (example: `flight-delay-predictor-api`)
+- `TF_IMAGE_URI` (full image URI currently deployed)
+- `TF_MODEL_ARTIFACT_PATH` (example: `data/model.joblib`)
+- `TF_CI_ENABLED` (`true` to enable Terraform workflow, `false` or unset to skip it)
+
+Create this **Repository Secret**:
+
+- `GCP_SA_KEY` (service account JSON key with permissions for Cloud Run, Artifact Registry, Service Usage, IAM, and Cloud Build as required by Terraform resources)
+
+If `TF_CI_ENABLED` is not set to `true`, the Terraform workflow is skipped automatically (it will not fail CI).
+
+### Recommended protection
+
+- Configure the GitHub `production` environment with required reviewers so manual apply needs approval.
