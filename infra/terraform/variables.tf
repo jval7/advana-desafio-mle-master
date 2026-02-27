@@ -21,9 +21,21 @@ variable "cloud_run_service_name" {
   default     = "flight-delay-predictor-api"
 }
 
+variable "cloud_run_runtime_service_account_email" {
+  description = "Runtime service account email for Cloud Run. Defaults to Compute Engine default service account when unset."
+  type        = string
+  default     = null
+}
+
 variable "image_uri" {
   description = "Full container image URI to deploy in Cloud Run."
   type        = string
+}
+
+variable "terraform_deployer_service_account_email" {
+  description = "Service account email used by Terraform apply in CI/CD. Granted iam.serviceAccountUser on the Cloud Run runtime service account."
+  type        = string
+  default     = null
 }
 
 variable "model_artifact_path" {
