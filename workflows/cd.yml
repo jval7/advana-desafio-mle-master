@@ -1,7 +1,253 @@
-name: 'Continuous Delivery'
+name: "Release Deployment"
 
 on:
-  ...
+  push:
+    branches: [main]
+    paths:
+      - "challenge/**"
+      - "infra/terraform/**"
+      - "data/model.skops"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/cd.yml"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Run build + deploy sequence"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_DIR: "infra/terraform"
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  TF_ARTIFACT_REPO: ${{ vars.TF_ARTIFACT_REPO }}
+  TF_CLOUD_RUN_SERVICE: ${{ vars.TF_CLOUD_RUN_SERVICE }}
+  TF_MODEL_ARTIFACT_PATH: ${{ vars.TF_MODEL_ARTIFACT_PATH }}
+  TF_IMAGE_NAME: ${{ vars.TF_IMAGE_NAME }}
+  TF_CI_ENABLED: ${{ vars.TF_CI_ENABLED }}
+  GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
 
 jobs:
-  ...
+  validate:
+    name: "Validate App + Infra Plan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --group dev --group test
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pre-commit
+
+      - name: Run pre-commit checks
+        run: make pc
+
+      - name: Run model tests
+        run: make model-test
+
+      - name: Run api tests
+        run: make api-test
+
+      - name: Authenticate to GCP
+        if: vars.TF_CI_ENABLED == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+
+      - name: Setup Terraform
+        if: vars.TF_CI_ENABLED == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Validate terraform configuration
+        if: vars.TF_CI_ENABLED == 'true'
+        run: |
+          set -euo pipefail
+          : "${GCP_PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
+          : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Set repository variable GCP_WORKLOAD_IDENTITY_PROVIDER}"
+          : "${GCP_SERVICE_ACCOUNT_EMAIL:?Set repository variable GCP_SERVICE_ACCOUNT_EMAIL}"
+          terraform -chdir="${TF_DIR}" init -input=false -no-color
+          terraform -chdir="${TF_DIR}" fmt -check -diff
+          terraform -chdir="${TF_DIR}" validate -no-color
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-reports
+          path: reports/**
+          if-no-files-found: ignore
+
+  build-and-push-image:
+    name: "Build + Push Image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [validate]
+    if: vars.TF_CI_ENABLED == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy == true))
+    outputs:
+      image_uri: ${{ steps.image.outputs.image_uri }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION:-us-central1}-docker.pkg.dev" --quiet
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image URI
+        id: image
+        run: |
+          set -euo pipefail
+          PROJECT_ID="${GCP_PROJECT_ID}"
+          REGION="${GCP_REGION:-us-central1}"
+          REPO="${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          IMAGE_NAME="${TF_IMAGE_NAME:-flight-delay-api}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${SHORT_SHA}-amd64"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+
+      - name: Build and push image (linux/amd64)
+        run: docker buildx build --platform linux/amd64 -t "${IMAGE_URI}" --push .
+
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build-and-push-image]
+    if: vars.TF_CI_ENABLED == 'true' && needs.build-and-push-image.result == 'success'
+    environment: production
+    outputs:
+      service_url: ${{ steps.outputs.outputs_service_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Write release terraform variables
+        run: |
+          set -euo pipefail
+          cat > "${TF_DIR}/terraform.auto.tfvars" <<EOF
+          project_id                           = "${GCP_PROJECT_ID}"
+          region                               = "${GCP_REGION:-us-central1}"
+          artifact_registry_repository_id      = "${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          cloud_run_service_name               = "${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+          image_uri                            = "${{ needs.build-and-push-image.outputs.image_uri }}"
+          model_artifact_path                  = "${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
+          container_port                       = 8080
+          cloud_run_min_instance_count         = 0
+          cloud_run_max_instance_count         = 2
+          cloud_run_service_min_instance_count = 0
+          cloud_run_manual_instance_count      = 0
+          allow_unauthenticated                = true
+          EOF
+          terraform -chdir="${TF_DIR}" fmt -no-color terraform.auto.tfvars
+
+      - name: Terraform init
+        run: terraform -chdir="${TF_DIR}" init -input=false -no-color
+
+      - name: Import existing resources (best effort)
+        run: |
+          set -euo pipefail
+          PROJECT_ID="${GCP_PROJECT_ID}"
+          REGION="${GCP_REGION:-us-central1}"
+          AR_REPO="${TF_ARTIFACT_REPO:-flight-delay-predictor}"
+          SERVICE="${TF_CLOUD_RUN_SERVICE:-flight-delay-predictor-api}"
+
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["run.googleapis.com"]' "projects/${PROJECT_ID}/services/run.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["artifactregistry.googleapis.com"]' "projects/${PROJECT_ID}/services/artifactregistry.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["cloudbuild.googleapis.com"]' "projects/${PROJECT_ID}/services/cloudbuild.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import 'google_project_service.required["iam.googleapis.com"]' "projects/${PROJECT_ID}/services/iam.googleapis.com" || true
+          terraform -chdir="${TF_DIR}" import google_artifact_registry_repository.docker "projects/${PROJECT_ID}/locations/${REGION}/repositories/${AR_REPO}" || true
+          terraform -chdir="${TF_DIR}" import google_cloud_run_v2_service.api "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE}" || true
+          terraform -chdir="${TF_DIR}" import 'google_cloud_run_v2_service_iam_member.public_invoker[0]' "projects/${PROJECT_ID}/locations/${REGION}/services/${SERVICE} roles/run.invoker allUsers" || true
+
+      - name: Terraform plan
+        run: terraform -chdir="${TF_DIR}" plan -no-color
+
+      - name: Terraform apply
+        run: terraform -chdir="${TF_DIR}" apply -auto-approve -no-color
+
+      - name: Export outputs
+        id: outputs
+        run: |
+          set -euo pipefail
+          echo "outputs_service_url=$(terraform -chdir="${TF_DIR}" output -raw service_url)" >> "$GITHUB_OUTPUT"
+
+  smoke-test:
+    name: "Smoke Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [terraform-apply]
+    if: vars.TF_CI_ENABLED == 'true' && needs.terraform-apply.result == 'success'
+
+    steps:
+      - name: Verify /health
+        run: |
+          set -euo pipefail
+          URL="${{ needs.terraform-apply.outputs.service_url }}"
+          curl -fsS "${URL}/health"
+
+      - name: Verify /predict
+        run: |
+          set -euo pipefail
+          URL="${{ needs.terraform-apply.outputs.service_url }}"
+          RESPONSE="$(curl -fsS -X POST "${URL}/predict" \
+            -H "Content-Type: application/json" \
+            -d '{"flights":[{"OPERA":"Aerolineas Argentinas","TIPOVUELO":"N","MES":3}]}' )"
+          echo "${RESPONSE}"
+          echo "${RESPONSE}" | grep -q '"predict"'

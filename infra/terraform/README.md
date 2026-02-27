@@ -101,12 +101,12 @@ terraform output service_name
 Workflow files:
 
 - `.github/workflows/terraform.yml`
-- `.github/workflows/release.yml`
+- `.github/workflows/cd.yml`
 
 What they do:
 
 - `terraform.yml`: runs `terraform fmt`, `validate`, and `plan` on PR and push to `develop` when Terraform files change.
-- `release.yml`: release sequence for `main` in this order:
+- `cd.yml`: release sequence for `main` in this order:
   1) app validation and tests
   2) image build and push
   3) terraform apply with the new image

@@ -10,7 +10,7 @@ on:
       - "Dockerfile"
       - "pyproject.toml"
       - "uv.lock"
-      - ".github/workflows/release.yml"
+      - ".github/workflows/cd.yml"
   workflow_dispatch:
     inputs:
       deploy:
