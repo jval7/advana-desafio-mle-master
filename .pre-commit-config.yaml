@@ -1,5 +1,6 @@
 minimum_pre_commit_version: "3.6.0"
 default_stages: [pre-commit]
+exclude: ^\.codex/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
