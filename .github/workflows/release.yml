@@ -190,7 +190,7 @@ jobs:
           model_artifact_path                  = "${TF_MODEL_ARTIFACT_PATH:-data/model.skops}"
           container_port                       = 8080
           cloud_run_min_instance_count         = 0
-          cloud_run_max_instance_count         = 3
+          cloud_run_max_instance_count         = 2
           cloud_run_service_min_instance_count = 0
           cloud_run_manual_instance_count      = 0
           allow_unauthenticated                = true
