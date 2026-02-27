@@ -200,7 +200,6 @@ jobs:
           cloud_run_runtime_service_account_email = "${RUNTIME_SERVICE_ACCOUNT}"
           image_uri                            = "${{ needs.build-and-push-image.outputs.image_uri }}"
           model_artifact_path                  = "${MODEL_ARTIFACT_PATH}"
-          terraform_deployer_service_account_email = "${GCP_SERVICE_ACCOUNT_EMAIL}"
           container_port                       = 8080
           cloud_run_min_instance_count         = 0
           cloud_run_max_instance_count         = 2

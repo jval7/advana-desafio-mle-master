@@ -4,7 +4,6 @@ artifact_registry_repository_id = "flight-delay-predictor"
 cloud_run_service_name          = "flight-delay-predictor-api"
 cloud_run_runtime_service_account_email = "395278761649-compute@developer.gserviceaccount.com"
 image_uri                       = "us-central1-docker.pkg.dev/advana-fd-jv7-02261522/flight-delay-predictor/flight-delay-api:b20ac6d-amd64"
-terraform_deployer_service_account_email = "github-deployer@advana-fd-jv7-02261522.iam.gserviceaccount.com"
 model_artifact_path             = "data/model.skops"
 container_port                  = 8080
 cloud_run_min_instance_count    = 0
