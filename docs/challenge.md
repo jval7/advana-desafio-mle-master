@@ -33,6 +33,9 @@ The closest alternative was:
   - `f1_1 = 0.3643`
   - `accuracy = 0.5503`
 
+Given the marginal gap, balanced LogisticRegression was considered a valid
+pragmatic alternative due to lower operational complexity.
+
 Additionally, non-balanced models kept `accuracy` around `0.81`,
 but with near-zero `recall_1`, so they are not suitable for delay detection.
 
